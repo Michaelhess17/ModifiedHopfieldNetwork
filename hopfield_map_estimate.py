@@ -8,11 +8,7 @@ import math
 import scipy.special as sps
 import scipy.optimize as spo
 import pickle
-import logging
 from multiprocessing import Pool
-
-logging.basicConfig(filename='C:/Users/Micha/Desktop/Hopfield Networks/MyLog.log', level=logging.DEBUG)
-
 
 # TODO: Make the mutual information estimate save/load data for faster processing time
 # TODO: Select N based on data
@@ -20,10 +16,11 @@ logging.basicConfig(filename='C:/Users/Micha/Desktop/Hopfield Networks/MyLog.log
 
 class ModifiedHopfieldNet:
 	"""
-		Argumentss:
+		Arguments:
 		N = number of nodes to build Hopfield network with
 		in_directory = the relative path to a folder containing the raw .mat files
-		out_directory = the relative path to a folder that you want to store the python data. If not used, defaults to in_directory
+		out_directory = the relative path to a folder that you want to store the python data. If not used, defaults to
+						in_directory
 		splits: the number of times to split the data to train on each portion (slices sequentially
 			--> default: 3 splits = beginning, middle, end thirds of experiment)
 		train_percent = the percentage of each chunk of data (the number of chunks as defined by splits) that will be
@@ -40,7 +37,7 @@ class ModifiedHopfieldNet:
 			self.out_directory = self.in_directory
 		else:
 			self.out_directory = out_directory
-		self.N = self.get_N()
+		self.N = self._get_n()
 		self.splits = splits
 		self.experiments = []
 		self.train_percent = train_percent
@@ -59,11 +56,11 @@ class ModifiedHopfieldNet:
 				if filename not in os.listdir(self.out_directory):
 					files.append(file)
 			p = Pool(self.n_jobs)
-			p.map(self.run_multiprocessing_J, files)
+			p.map(self.run_multiprocessing_j, files)
 			p.close()
 			p.join()
 
-	def get_N(self):
+	def _get_n(self):
 		# dats = self.get_dats()
 		# try:
 		# 	Cs = dats[0][0]['Cs']
@@ -73,10 +70,10 @@ class ModifiedHopfieldNet:
 		# N = len(np.unique(Cs))
 		# N = max(60, N)
 		if self.type == 'J' or self.type == 'MI':
-			N = 60
+			n = 60
 		else:
-			N = 61
-		return N
+			n = 61
+		return n
 
 	def load_and_save_data(self, **kwargs):
 		for file in os.listdir(self.in_directory):
@@ -84,7 +81,7 @@ class ModifiedHopfieldNet:
 			if filename not in os.listdir(self.out_directory):
 				print(f'---------------------- Importing .mat file: {file} ----------------------')
 				dat = spio.loadmat(os.path.join(self.in_directory, file))
-				ys = self.binaryVecs(dat, **kwargs)
+				ys = self.binary_vectors(dat, **kwargs)
 				self.experiments.append(ys)
 				y_sparse = csr_matrix(ys, dtype='uint8')
 				save_npz(os.path.join(self.out_directory, filename), y_sparse)
@@ -111,37 +108,40 @@ class ModifiedHopfieldNet:
 					chunked_nets.append(hop)
 				experiment_nets.append(chunked_nets)
 				if self.type == 'map':
-					print(f'Experiment: {i} // Chunk: {j} // Avg Accuracy: {round(np.mean(avg_acc), 3)} +/- {round(np.std(avg_acc), 3)}')
+					print(f'Experiment: {i} // Chunk: {j} // Avg Accuracy: {round(np.mean(avg_acc).item(), 3)} +/- '
+											f'{round(np.std(avg_acc).item(), 3)}')
 				else:
 					print(f'Experiment: {i} // Chunk: {j}')
 			print(f'---------------------- Finished experiment: {i} ----------------------')
 			self.networks.append(experiment_nets)
 
-	def chunked(self, iterable, n):
-		chunksize = int(math.ceil(len(iterable) / n))
-		return (iterable[i * chunksize:i * chunksize + chunksize] for i in range(n))
+	@staticmethod
+	def chunked(iterable, n):
+		chunk_size = int(math.ceil(len(iterable) / n))
+		return (iterable[i * chunk_size:i * chunk_size + chunk_size] for i in range(n))
 
-	def getL(self, x, h1, A):
-		L = np.exp(np.dot(h1.T, x) + A)
-		if L > 1:
+	@staticmethod
+	def _calc_probabilities(x, h1, a):
+		prob = np.exp(np.dot(h1.T, x) + a)
+		if prob > 1:
 			return 1
 		else:
 			return 0
 
-	def get_preds(self, y, hop):
-		J = hop.J
+	def get_predictions(self, y, hop):
+		j = hop.J
 		h = -hop.theta
-		A = J[-1, -1]
-		B = h[-1]
+		a = j[-1, -1]
+		b = h[-1]
 		# J0 = J[:-1, :-1]
-		j = J[-1, :-1]
+		j = j[-1, :-1]
 		# jT = J[-1, :-1]
 		# J = J0
 		h1 = 2 * j
 		# h0 = h
-		A = A + B
+		a += b
 		x = y[:-1]
-		p = self.getL(x, h1, A)
+		p = self._calc_probabilities(x, h1, a)
 		return p
 
 	def get_accuracy(self, memories, hop):
@@ -149,7 +149,7 @@ class ModifiedHopfieldNet:
 		y_preds = []
 		y_true = []
 		for k, i in enumerate(memories):
-			y_preds.append(self.get_preds(i, hop))
+			y_preds.append(self.get_predictions(i, hop))
 			y_true.append(i[-1])
 			if y_preds[k] == y_true[k]:
 				accuracy += 1
@@ -157,7 +157,7 @@ class ModifiedHopfieldNet:
 		return round(accuracy * 100, 3)
 
 	def get_js(self, filename='Js_Joost.pkl'):
-		Js = []
+		js = []
 		for experiment_networks in self.networks:
 			experiment_nets = []
 			for memory_chunk_networks in experiment_networks:
@@ -165,11 +165,11 @@ class ModifiedHopfieldNet:
 				for network in memory_chunk_networks:
 					chunk_nets.append(network._J)
 				experiment_nets.append(chunk_nets)
-			Js.append(experiment_nets)
-		Js = np.array(Js).squeeze()
+			js.append(experiment_nets)
+		js = np.array(js).squeeze()
 		with open(filename, 'wb') as file:
-			pickle.dump(Js, file)
-		return Js
+			pickle.dump(js, file)
+		return js
 
 	def get_thetas(self, filename='Thetas_Joost.pkl'):
 		thetas = []
@@ -186,42 +186,42 @@ class ModifiedHopfieldNet:
 			pickle.dump(thetas, file)
 		return thetas
 
-	def binaryVecs(self, dat, dt=None):
+	def binary_vectors(self, dat, dt=None):
 		if (self.type == 'map') or (self.type == 'MI') & (self.data_type == 'old'):
 			if dt is None:
 				dt = 0.05
-			StimTimes = dat['StimTimes']
-			Cs = np.array(dat['Cs'], dtype='uint32')
-			Ts = np.array(dat['Ts'], dtype='uint32')
-			foo_s = np.asarray([int(i / dt) for i in StimTimes])
-			Tmax = np.max([np.max(StimTimes), np.max(Ts)])
+			stimulus_times = dat['StimTimes']
+			firing_neurons = np.array(dat['Cs'], dtype='uint32')
+			firing_times = np.array(dat['Ts'], dtype='uint32')
+			foo_s = np.asarray([int(i / dt) for i in stimulus_times])
+			max_time = np.max([np.max(stimulus_times), np.max(firing_times)])
 		elif (self.type == 'J') & (self.data_type == 'old'):
 			if dt is None:
 				dt = 800
-			Cs = np.array(dat['Cs'], dtype='uint32')
-			Ts = np.array(dat['Ts'], dtype='uint32')
-			Cs, Ts = self.clean_Cs_and_Ts(Cs, Ts)
-			Tmax = np.max(Ts)
+			firing_neurons = np.array(dat['Cs'], dtype='uint32')
+			firing_times = np.array(dat['Ts'], dtype='uint32')
+			firing_neurons, firing_times = self.clean_data(firing_neurons, firing_times)
+			max_time = np.max(firing_times)
 		else:
 			if dt is None:
 				dt = 800
-			Cs = dat['data']['Cs']
-			Ts = dat['data']['Ts']
-			Cs = np.array([a[0] for a in Cs.tolist()[0][0].tolist()], dtype='uint8')
-			Ts = np.array([a[0] for a in Ts.tolist()[0][0].tolist()], dtype='uint32')
-			CsTs = self.clean_Cs_and_Ts(Cs, Ts)
-			Cs = CsTs[0]
-			Ts = CsTs[1]
-			Tmax = np.max(Ts)
+			firing_neurons = dat['data']['Cs']
+			firing_times = dat['data']['Ts']
+			firing_neurons = np.array([a[0] for a in firing_neurons.tolist()[0][0].tolist()], dtype='uint8')
+			firing_times = np.array([a[0] for a in firing_times.tolist()[0][0].tolist()], dtype='uint32')
+			firing_neurons_and_times = self.clean_data(firing_neurons, firing_times)
+			firing_neurons = firing_neurons_and_times[0]
+			firing_times = firing_neurons_and_times[1]
+			max_time = np.max(firing_times)
 
-		foo_x = np.asarray([int(i / 0.1) for i in Ts])
+		foo_x = np.asarray([int(i / 0.1) for i in firing_times])
 
 		ys = []
-		for i in range(int(Tmax / dt)):
+		for i in range(int(max_time / dt)):
 			if i in foo_x:
 				# which neurons are firing
-				inds = (i * dt < Ts) * (Ts < (i + 1) * dt)
-				neurons = Cs[inds]
+				idx = (i * dt < firing_times) * (firing_times < (i + 1) * dt)
+				neurons = firing_neurons[idx]
 				foo2 = np.zeros(self.N)
 				foo2[neurons] = 1
 			else:
@@ -237,18 +237,18 @@ class ModifiedHopfieldNet:
 		ys = np.asarray(ys, dtype='uint8').squeeze()
 		return ys
 
-	def clean_Cs_and_Ts(self, Cs, Ts, threshold=80_000, last_index=0):
-		if 60 not in list(Cs):
-			return np.array(Cs), np.array(Ts)
+	def clean_data(self, firing_neurons, firing_times, threshold=80_000, last_index=0):
+		if 60 not in list(firing_neurons):
+			return np.array(firing_neurons), np.array(firing_times)
 		first_marker = 0
 		counter = 0
-		Cs_beginning = list(Cs[:last_index])
-		Ts_beginning = list(Ts[:last_index])
-		Cs = list(Cs[last_index:])
-		Ts = list(Ts[last_index:])
+		beginning_neurons = list(firing_neurons[:last_index])
+		beginning_times = list(firing_times[:last_index])
+		firing_neurons = list(firing_neurons[last_index:])
+		firing_times = list(firing_times[last_index:])
 		index1 = 0
 		index2 = 0
-		for k, neuron in enumerate(Cs):
+		for k, neuron in enumerate(firing_neurons):
 			if (neuron == 60) & (first_marker == 0):
 				index1 = k
 				first_marker = 1
@@ -258,132 +258,133 @@ class ModifiedHopfieldNet:
 				counter = 0
 			elif first_marker == 1:
 				counter += 1
-			if (counter > threshold) or ((k + 1) == len(Cs)):
+			if (counter > threshold) or ((k + 1) == len(firing_neurons)):
 				cutout = list(range(index1, index2+1))
-				Cs = [b for a, b in enumerate(Cs) if a not in cutout]
-				Cs = Cs_beginning + Cs
-				Ts = [b for a, b in enumerate(Ts) if a not in cutout]
-				Ts = Ts_beginning + Ts
-				return self.clean_Cs_and_Ts(Cs, Ts, threshold, index1+len(Cs_beginning)+2*threshold)
+				firing_neurons = [b for a, b in enumerate(firing_neurons) if a not in cutout]
+				firing_neurons = beginning_neurons + firing_neurons
+				firing_times = [b for a, b in enumerate(firing_times) if a not in cutout]
+				firing_times = beginning_times + firing_times
+				return self.clean_data(firing_neurons, firing_times, threshold, index1 + len(beginning_neurons) + 2 * threshold)
 
-	def run_multiprocessing_J(self, filename):
+	def run_multiprocessing_j(self, filename):
 		dat = spio.loadmat(os.path.join(self.in_directory, filename))
-		ys = self.binaryVecs(dat, dt=self.dt)
+		ys = self.binary_vectors(dat, dt=self.dt)
 		self.experiments.append(ys)
 		self.filenames.append(filename)
 		y_sparse = csr_matrix(ys, dtype='uint8')
 		filename = filename[:-4] + f'_N_{self.N}_sparse.npz'
 		save_npz(os.path.join(self.out_directory, filename), y_sparse)
 
-	def mutInfo_NSB(self, xs, ys, Kx, Ky):
+	@staticmethod
+	def mut_info_nsb(xs, ys, k_x, k_y):
 		# use NSB entropy estimator
-		# first get nXY and nX and nY
+		# first get n_xy and n_x and n_y
 		# could probably just use np.histogram
-		nX = {}
+		n_x = {}
 		for x in xs:
-			if str(x) in nX:
-				nX[str(x)] += 1
+			if str(x) in n_x:
+				n_x[str(x)] += 1
 			else:
-				nX[str(x)] = 1
+				n_x[str(x)] = 1
 
-		nY = {}
+		n_y = {}
 		for y in ys:
-			if str(y) in nY:
-				nY[str(y)] += 1
+			if str(y) in n_y:
+				n_y[str(y)] += 1
 			else:
-				nY[str(y)] = 1
+				n_y[str(y)] = 1
 
-		nXY = {}
+		n_xy = {}
 		for i in range(len(xs)):
 			x = xs[i]
 			y = ys[i]
-			if str(x) + '+' + str(y) in nXY:
-				nXY[str(x) + '+' + str(y)] += 1
+			if str(x) + '+' + str(y) in n_xy:
+				n_xy[str(x) + '+' + str(y)] += 1
 			else:
-				nXY[str(x) + '+' + str(y)] = 1
+				n_xy[str(x) + '+' + str(y)] = 1
 
-		nX = np.asarray([nx for nx in nX.values()])
-		nY = np.asarray([ny for ny in nY.values()])
-		nXY = np.asarray([nxy for nxy in nXY.values()])
+		n_x = np.asarray([nx for nx in n_x.values()])
+		n_y = np.asarray([ny for ny in n_y.values()])
+		n_xy = np.asarray([nxy for nxy in n_xy.values()])
 		#
-		Kxy = Kx * Ky
+		kxy = k_x * k_y
 
 		#
 		# now use the following defn
-		def entropy_NSB(ns, K):
+		def entropy_nsb(ns, k):
 			ns = ns[ns > 0]
-			N = np.sum(ns)
+			n = np.sum(ns)
 
-			def Lagrangian(beta):
-				K0 = K - len(ns)
-				L = -np.sum(sps.gammaln(beta + ns)) - K0 * sps.gammaln(beta) + K * sps.gammaln(beta) - sps.gammaln(
-					K * beta) + sps.gammaln(K * beta + N)
-				return L
+			def lagrangian(beta):
+				k0 = k - len(ns)
+				lag = -np.sum(sps.gammaln(beta + ns)) - k0 * sps.gammaln(beta) + k * sps.gammaln(beta) - sps.gammaln(
+					k * beta) + sps.gammaln(k * beta + n)
+				return lag
 
 			# Before: find the beta that minimizes L
-			ans = spo.minimize_scalar(lambda x: Lagrangian(x), bounds=[(0, None)])
+			ans = spo.minimize_scalar(lambda x: lagrangian(x), bounds=[(0, None)])
 			b = ans.x
 			# calculate average S
-			foos = (ns + b) * (sps.psi(N + K * b + 1) - sps.psi(ns + b + 1)) / (N + K * b)
-			K0 = K - len(ns)
-			S = np.sum(foos) + (K0 * b * (sps.psi(N + K * b + 1) - sps.psi(b + 1)) / (N + K * b))
+			foo = (ns + b) * (sps.psi(n + k * b + 1) - sps.psi(ns + b + 1)) / (n + k * b)
+			k0 = k - len(ns)
+			s = np.sum(foo) + (k0 * b * (sps.psi(n + k * b + 1) - sps.psi(b + 1)) / (n + k * b))
 
-			def avgS2(ns, K, b):
-				N = np.sum(ns)
-				K0 = K - len(ns)
-				# calculate T
-				foo1 = (sps.psi(ns + b + 1) - sps.psi(N + K * b + 1)) ** 2 + sps.polygamma(1, ns + b + 2) - sps.polygamma(
-					1, N + K * b + 2)
-				T = np.sum((ns + b) * (ns + b + 1) * foo1 / (N + K * b) / (N + K * b + 1))
-				foo1 = (sps.psi(b + 1) - sps.psi(N + K * b + 1)) ** 2 + sps.polygamma(1, b + 2) - sps.polygamma(1, N + K * b + 2)
-				T += K0 * b * (b + 1) * foo1 / (N + K * b) / (N + K * b + 1)
+			def avg_s2(ns, k, b):
+				n = np.sum(ns)
+				k0 = k - len(ns)
+				# calculate t
+				foo1 = (sps.psi(ns + b + 1) - sps.psi(n + k * b + 1)) ** 2 + sps.polygamma(1, ns + b + 2) - sps.polygamma(
+					1, n + k * b + 2)
+				t = np.sum((ns + b) * (ns + b + 1) * foo1 / (n + k * b) / (n + k * b + 1))
+				foo1 = (sps.psi(b + 1) - sps.psi(n + k * b + 1)) ** 2 + sps.polygamma(1, b + 2) - sps.polygamma(1, n + k * b + 2)
+				t += k0 * b * (b + 1) * foo1 / (n + k * b) / (n + k * b + 1)
 
-				# calculate R
-				def r(ni, nj, N, K, b):
-					alphai = ni + b
-					alphaj = nj + b
-					foo1 = (sps.psi(alphai) - sps.psi(N + K * b + 1)) * (
-								sps.psi(alphaj) - sps.psi(N + K * b + 1)) - sps.polygamma(1, N + K * b + 2)
-					foo1 *= alphaj * alphai / (N + K * b) / (N + K * b + 1)
+				# calculate r
+				def corr(ni, nj, n, k, b):
+					alpha_i = ni + b
+					alpha_j = nj + b
+					foo1 = (sps.psi(alpha_i) - sps.psi(n + k * b + 1)) * (
+								sps.psi(alpha_j) - sps.psi(n + k * b + 1)) - sps.polygamma(1, n + k * b + 2)
+					foo1 *= alpha_j * alpha_i / (n + k * b) / (n + k * b + 1)
 					return foo1
 
-				foo1 = (ns + b) * (sps.psi(ns + b) - sps.psi(N + K * b + 1))
-				R = (np.sum(np.outer(foo1, foo1)) - np.sum(np.outer(ns + b, ns + b)) * sps.polygamma(1, N + K * b + 2)) / (
-								N + K * b) / (N + K * b + 1)
-				R -= np.sum(r(ns, ns, N, K, b))
-				R += K0 * np.sum(r(ns, 0, N, K, b) + r(0, ns, N, K, b))
-				if K0 > 0:
-					R += np.exp(np.log(K0) + np.log(K0 - 1) + np.log(r(0, 0, N, K, b)))
-				return R + T
+				foo1 = (ns + b) * (sps.psi(ns + b) - sps.psi(n + k * b + 1))
+				r = (np.sum(np.outer(foo1, foo1)) - np.sum(np.outer(ns + b, ns + b)) * sps.polygamma(1, n + k * b + 2)) / (
+						n + k * b) / (n + k * b + 1)
+				r -= np.sum(corr(ns, ns, n, k, b))
+				r += k0 * np.sum(corr(ns, 0, n, k, b) + corr(0, ns, n, k, b))
+				if k0 > 0:
+					r += np.exp(np.log(k0) + np.log(k0 - 1) + np.log(corr(0, 0, n, k, b)))
+				return r + t
 
-			S2 = avgS2(ns, K, b)
-			return S, S2 - S ** 2
+			s2 = avg_s2(ns, k, b)
+			return s, s2 - s ** 2
 
 		#
-		SXY, varSXY = entropy_NSB(nXY, Kxy)
-		SX, varSX = entropy_NSB(nX, Kx)
-		SY, varSY = entropy_NSB(nY, Ky)
-		return SX + SY - SXY, np.sqrt(varSXY + varSX + varSY)
+		sxy, var_sxy = entropy_nsb(n_xy, kxy)
+		sx, var_sx = entropy_nsb(n_x, k_x)
+		sy, var_sy = entropy_nsb(n_y, k_y)
+		return sx + sy - sxy, np.sqrt(var_sxy + var_sx + var_sy)
 
 	# figure out which neuron to focus on
-	def MI_subset(self, xs, ys, maxChange=0.01):
+	def mut_info_subset(self, xs, ys, max_change=0.01):
 		# get the best neuron first
 		mis = []
 		var_mis = []
 		for n in range(self.N):
 			foo_y = ys[:, n]
 			foo_y = [[y] for y in foo_y]
-			foo = self.mutInfo_NSB(xs, foo_y, 2, 2)
+			foo = self.mut_info_nsb(xs, foo_y, 2, 2)
 			mis.append(foo[0])
 			var_mis.append(foo[1])
-		MI = [np.max(mis)]
-		var_MI = [var_mis[np.argmax(mis)]]
+		mi = [np.max(mis)]
+		var_mi = [var_mis[np.argmax(mis).item()]]
 		best_neurons = [np.argmax(mis)]
 		#
-		deltaMI = np.inf
+		delta_mi = np.inf
 		k = 1
 		#
-		while deltaMI > maxChange:
+		while delta_mi > max_change:
 			# choose the next neuron to add
 			mis = []
 			var_mis = []
@@ -394,15 +395,15 @@ class ModifiedHopfieldNet:
 				else:
 					inds = np.hstack([best_neurons, j])
 					foo_y = ys[:, inds]
-					foo = list(self.mutInfo_NSB(xs, foo_y, 2, np.power(2, k + 1)))
+					foo = list(self.mut_info_nsb(xs, foo_y, 2, np.power(2, k + 1)))
 					mis.append(foo[0])
 					var_mis.append(foo[1])
-			MI.append(np.max(mis))
-			deltaMI = (MI[-1] - MI[-2]) / MI[-2]
-			var_MI.append(var_mis[np.argmax(mis)])
+			mi.append(np.max(mis))
+			delta_mi = (mi[-1] - mi[-2]) / mi[-2]
+			var_mi.append(var_mis[np.argmax(mis).item()])
 			best_neurons = np.hstack([best_neurons, np.argmax(mis)])
 			k += 1
-		return MI[-1], var_MI[-1], best_neurons
+		return mi[-1], var_mi[-1], best_neurons
 
 	def get_dats(self, dts=None):
 		dats = []
@@ -414,33 +415,33 @@ class ModifiedHopfieldNet:
 			filenames.append(filename)
 		return dats, filenames
 
-	def get_MI_estimates(self, dts=np.asarray([0.01, 0.03, 0.1, 0.3, 1])):
+	def get_mut_info_estimates(self, dts=np.asarray([0.01, 0.03, 0.1, 0.3, 1])):
 		dats, filenames = self.get_dats(dts)
-		allMIs = []
-		allstdMIs = []
+		all_mut_infos = []
+		all_std_mut_infos = []
 		for k, dat in enumerate(dats):
-			MIs = np.zeros([3, len(dts), self.splits])
-			stdMIs = np.zeros([3, len(dts), self.splits])
+			mut_infos = np.zeros([3, len(dts), self.splits])
+			mut_info_stds = np.zeros([3, len(dts), self.splits])
 			dat_ys = []
 			for i in range(len(dts)):
-				ys = self.binaryVecs(dat, dt=dts[i])
+				ys = self.binary_vectors(dat, dt=dts[i])
 				dat_ys.append(ys)
 				xs = ys[:, :self.N]
 				ys = ys[:, -1]
 				xs_chunked = self.chunked(xs, self.splits)
 				ys_chunked = self.chunked(ys, self.splits)
-				MI_chunks = []
-				varMI_chunks = []
+				mut_info_chunks = []
+				std_mut_info_chunks = []
 				for xs_chunk, ys_chunk in zip(xs_chunked, ys_chunked):
-					MI, varMI, best_neurons = self.MI_subset(ys_chunk, xs_chunk, 0.05)
-					MI_chunks.append(MI)
-					varMI_chunks.append(varMI)
-				MIs[:, i] = np.array(MIs).squeeze()
-				stdMIs[:, i, :] = np.sqrt(np.array(varMI_chunks).squeeze())
+					mut_info, std_mut_info, best_neurons = self.mut_info_subset(ys_chunk, xs_chunk, 0.05)
+					mut_info_chunks.append(mut_info)
+					std_mut_info_chunks.append(std_mut_info)
+				mut_infos[:, i] = np.array(mut_infos).squeeze()
+				mut_info_stds[:, i, :] = np.sqrt(np.array(std_mut_info_chunks).squeeze())
 			self.experiments.append(dat_ys)
-			np.savez(filenames[k], MIs=MIs, stdMIs=stdMIs, dts=dts)
-			allMIs.append(MIs)
-			allstdMIs.append(stdMIs)
-		allMIs = np.array(allMIs)
-		allstdMIs = np.array(allstdMIs)
-		return allMIs, allstdMIs
+			np.savez(filenames[k], MIs=mut_infos, stdMIs=mut_info_stds, dts=dts)
+			all_mut_infos.append(mut_infos)
+			all_std_mut_infos.append(mut_info_stds)
+		all_mut_infos = np.array(all_mut_infos)
+		all_std_mut_infos = np.array(all_std_mut_infos)
+		return all_mut_infos, all_std_mut_infos

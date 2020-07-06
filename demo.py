@@ -55,7 +55,7 @@ net.build_and_train_networks()
 # To estimate mutual information with different dts...
 dts = np.asarray([0.01, 0.03, 0.1, 0.3, 1])
 net = ModifiedHopfieldNet(in_directory='toy_data/', out_directory='new_data/', exp_type='MI', splits=2)
-MIs, varMIs = net.get_MI_estimates(dts)
+MIs, varMIs = net.get_mut_info_estimates(dts)
 # will save estimates and variation of the estimates for each file
 
 
