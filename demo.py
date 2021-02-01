@@ -1,4 +1,4 @@
-from hopfield_map_estimate import ModifiedHopfieldNet
+from hopfield_map_estimate_Marzen_version import ModifiedHopfieldNet
 import numpy as np
 
 
@@ -30,6 +30,10 @@ import numpy as np
 # --> default: 800 (50 ms)
 # WARNING: This will vary greatly on your sample rate!
 
+# N: The number of neurons in the experiment
+# --> default: 60
+# (if left to None it will be set to 60, sorry that part is a little messy)
+
 # n_jobs:: Increase this value from one to load data with multiprocessing
 # WARNING: this only works with exp_type="J" currently, and data stored in the "experiments" attribute of the
 # ModifiedHopfieldNet will not necessraily be in order. If using this, I would recommend doing it to load and preprocess
@@ -39,25 +43,34 @@ import numpy as np
 # Put all .mat files in a folder, and create an empty output folder for the python-loadable files!
 # Alternatively, if the out_directory field is left blank, it will use the in_directory as the out_directory!
 
-# To conduct an analysis of changing co-activation (functional connectivity) between different stimulation protocols:
-net = ModifiedHopfieldNet(in_directory='toy_data2/', out_directory='new_data/', exp_type='J', splits=1, num_nets=5,
-                          train_percent=0.66)
-net.build_and_train_networks()
-Js = net.get_js()
-# Js will be a numpy array of shape (num_files, splits, num_nets, N, N)
-
-# To estimate MAP and get accuracy of our model with hopfield networks...
-net = ModifiedHopfieldNet( in_directory='toy_data/', out_directory='new_data/', exp_type='map', splits=1,
-                                        num_nets=5, train_percent=0.66)
-net.build_and_train_networks()
-# will print the average accuracy for each split of the data using our model
+# # To conduct an analysis of changing co-activation (functional connectivity) between different stimulation protocols:
+# net = ModifiedHopfieldNet(in_directory='toy_data/', out_directory='new_data/', exp_type='J', splits=1, num_nets=5,
+#                           train_percent=0.66, data_type='old', stim_shift=10, dt=200)
+# net.build_and_train_networks()
+# Js = net.get_js()
+# # Js will be a numpy array of shape (num_files, splits, num_nets, N, N)
+#
+# # # To estimate MAP and get accuracy of our model with hopfield networks...
+# net = ModifiedHopfieldNet(in_directory='toy_data4/', out_directory='new_data2/', exp_type='map', splits=1,
+#                                         num_nets=5, train_percent=0.66, data_type='new')
+# accs = net.build_and_train_networks()
+# accs = np.array(accs)
+# # # will print the average accuracy for each split of the data using our model
 
 # To estimate mutual information with different dts...
-dts = np.asarray([0.01, 0.03, 0.1, 0.3, 1])
-net = ModifiedHopfieldNet(in_directory='toy_data/', out_directory='new_data/', exp_type='MI', splits=2)
-MIs, varMIs = net.get_mut_info_estimates(dts)
+dts = np.asarray([12, 24])
+net = ModifiedHopfieldNet(in_directory='toy_data4/', out_directory='new_data/', exp_type='MI', splits=4, data_type='new',
+                          stim_shift=5)
+MIs, varMIs = net.get_MI_estimates([3200, 4800])
+# net = ModifiedHopfieldNet(in_directory='toy_data4/', out_directory='new_data/', exp_type='mi', splits=2, data_type='new',
+#                           stim_shift=0)
+# MIs, varMIs = net.get_MI_estimates([1600])
 # will save estimates and variation of the estimates for each file
 
 
-
-
+# To perform MLE with the explicitMLE algorithm:
+# net = ModifiedHopfieldNet(in_directory='toy_data/', out_directory='new_data/', exp_type='J', splits=2, data_type='new',
+#                           stim_shift=5)
+# thetas, Js = net.run_explicitMLE()
+# Note that the experiment_type paramter does not matter if you only want to run the MLE algorithm on the data in
+# your in_directory
